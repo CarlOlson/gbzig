@@ -17,6 +17,8 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "gbzig",
         .root_module = exe_mod,
+        .use_lld = false,
+        .use_llvm = false,
     });
 
     b.installArtifact(exe);
@@ -42,7 +44,8 @@ pub fn build(b: *std.Build) void {
         const raylib_dep = b.dependency("raylib_zig", .{
             .target = target,
             .optimize = optimize,
-            .linux_display_backend = .X11,
+            // .linux_display_backend = .X11,
+            .shared = true,
         });
 
         const raylib = raylib_dep.module("raylib"); // main raylib module
