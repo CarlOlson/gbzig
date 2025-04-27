@@ -1,30 +1,10 @@
 const std = @import("std");
 const rl = @import("raylib");
 
-const Register = enum {
-    a,
-    b,
-    c,
-    d,
-    e,
-    f,
-    h,
-    l,
-    af,
-    bc,
-    de,
-    hl,
+const Register = @import("register.zig").Register;
+const Instruction = @import("instruction.zig").T;
 
-    pub fn typeOf(comptime self: @This()) type {
-        switch (self) {
-            .af => return u16,
-            .bc => return u16,
-            .de => return u16,
-            .hl => return u16,
-            else => return u8,
-        }
-    }
-};
+const clockHz = 2 ** 22;
 
 const Flag = enum(u8) {
     z = 7, // zero
@@ -46,6 +26,55 @@ const Cpu = struct {
     f: u8 = 0,
     h: u8 = 0,
     l: u8 = 0,
+    pc: u16 = 0, // program counter
+    sp: u16 = 0, // stack pointer
+    ir: u8 = 0, // instruction regiester
+    ie: u8 = 0, // interrupt enable
+
+    pub const Init = struct {
+        a: u8 = 0,
+        b: u8 = 0,
+        c: u8 = 0,
+        d: u8 = 0,
+        e: u8 = 0,
+        // f: u8 = 0,
+        h: u8 = 0,
+        l: u8 = 0,
+        zero: bool = false,
+        subtract: bool = false,
+        half_carry: bool = false,
+        carry: bool = false,
+    };
+
+    pub fn init(i: Init) @This() {
+        var self: @This() = .{
+            .a = i.a,
+            .b = i.b,
+            .c = i.c,
+            .d = i.d,
+            .e = i.e,
+            .h = i.h,
+            .l = i.l,
+        };
+
+        self.setFlag(.z, i.zero);
+        self.setFlag(.n, i.subtract);
+        self.setFlag(.h, i.half_carry);
+        self.setFlag(.c, i.carry);
+
+        return self;
+    }
+
+    pub fn reset(self: *@This()) void {
+        self.a = 0;
+        self.b = 0;
+        self.c = 0;
+        self.d = 0;
+        self.e = 0;
+        self.f = 0;
+        self.h = 0;
+        self.l = 0;
+    }
 
     pub inline fn getFlag(self: *@This(), comptime flag: Flag) bool {
         return (self.f & flag.mask()) > 0;
@@ -69,7 +98,7 @@ const Cpu = struct {
             .f => self.f,
             .h => self.h,
             .l => self.l,
-            .af => (@as(u16, self.a) << 8) | @as(u16, self.f),
+            .af => (@as(u16, self.a) << 8) | (@as(u16, self.f) & 0xF0),
             .bc => (@as(u16, self.b) << 8) | @as(u16, self.c),
             .de => (@as(u16, self.d) << 8) | @as(u16, self.e),
             .hl => (@as(u16, self.h) << 8) | @as(u16, self.l),
@@ -88,7 +117,7 @@ const Cpu = struct {
             .l => self.l = value,
             .af => {
                 self.a = @intCast((value & 0xFF00) >> 8);
-                self.f = @intCast(value & 0xFF);
+                self.f = @intCast(value & 0xF0);
             },
             .bc => {
                 self.b = @intCast((value & 0xFF00) >> 8);
@@ -104,7 +133,83 @@ const Cpu = struct {
             },
         }
     }
+
+    pub fn execute(self: *@This(), instruction: Instruction) void {
+        const dst = instruction.dst;
+        const src = instruction.src;
+        switch (instruction.op) {
+            .add => {
+                std.debug.assert(dst == .a);
+
+                const dv = self.get(.a);
+                const sv = switch (src) {
+                    .a => self.get(.a),
+                    .b => self.get(.b),
+                    .c => self.get(.c),
+                    .d => self.get(.d),
+                    .e => self.get(.e),
+                    .f => self.get(.f),
+                    .h => self.get(.h),
+                    .l => self.get(.l),
+                    else => @panic("unimplemented"),
+                };
+
+                const out = @addWithOverflow(dv, sv);
+                self.set(.a, out[0]);
+
+                self.setFlag(.n, false);
+                self.setFlag(.z, out[0] == 0);
+                self.setFlag(.c, out[1] > 0);
+                self.setFlag(.h, (dv & 0xF) + (sv & 0xF) > 0xF);
+
+                // TODO minimize writes for microcontrollers?
+                // self.f =
+                //     (if (out[0] == 0) Flag.z.mask() else 0) |
+                //     (if (out[1] > 0) Flag.c.mask() else 0) |
+                //     (if ((dv & 0xF) + (sv & 0xF) > 0xF) Flag.h.mask() else 0);
+
+                // TODO move to higher level
+                self.pc += 1;
+            },
+            else => @panic("unimplemented"),
+        }
+    }
 };
+
+test "cpu - execute - add" {
+    {
+        var cpu = Cpu.init(.{ .a = 2, .b = 4, .subtract = true });
+        cpu.execute(.{ .op = .add, .dst = .a, .src = .b });
+        try std.testing.expectEqual(6, cpu.get(.a));
+        try std.testing.expectEqual(false, cpu.getFlag(.n));
+        try std.testing.expectEqual(false, cpu.getFlag(.z));
+        try std.testing.expectEqual(false, cpu.getFlag(.c));
+    }
+
+    {
+        var cpu = Cpu.init(.{ .a = 0xFF, .b = 1 });
+        cpu.execute(.{ .op = .add, .dst = .a, .src = .b });
+        try std.testing.expectEqual(0, cpu.get(.a));
+        try std.testing.expectEqual(true, cpu.getFlag(.z));
+        try std.testing.expectEqual(true, cpu.getFlag(.c));
+
+        cpu.execute(.{ .op = .add, .dst = .a, .src = .b });
+        try std.testing.expectEqual(1, cpu.get(.a));
+        try std.testing.expectEqual(false, cpu.getFlag(.z));
+        try std.testing.expectEqual(false, cpu.getFlag(.c));
+    }
+
+    {
+        var cpu = Cpu.init(.{ .a = 0xF, .b = 1 });
+        cpu.execute(.{ .op = .add, .dst = .a, .src = .b });
+        try std.testing.expectEqual(0x10, cpu.get(.a));
+        try std.testing.expectEqual(true, cpu.getFlag(.h));
+
+        cpu.execute(.{ .op = .add, .dst = .a, .src = .b });
+        try std.testing.expectEqual(0x11, cpu.get(.a));
+        try std.testing.expectEqual(false, cpu.getFlag(.h));
+    }
+}
 
 test "cpu - flags" {
     var cpu = Cpu{};
@@ -122,9 +227,9 @@ test "cpu - flags" {
 test "cpu - set u16 reg, get u8 regs" {
     var cpu = Cpu{};
 
-    cpu.set(.af, 0x0102);
+    cpu.set(.af, 0x012F);
     try std.testing.expectEqual(0x01, cpu.get(.a));
-    try std.testing.expectEqual(0x02, cpu.get(.f));
+    try std.testing.expectEqual(0x20, cpu.get(.f));
 
     cpu.set(.bc, 0x0304);
     try std.testing.expectEqual(0x03, cpu.get(.b));
@@ -143,7 +248,7 @@ test "cpu - set u8 regs, get u16 reg" {
     var cpu = Cpu{};
 
     cpu.set(.a, 1);
-    cpu.set(.f, 2);
+    cpu.set(.f, 0x2F);
     cpu.set(.b, 3);
     cpu.set(.c, 4);
     cpu.set(.d, 5);
@@ -151,7 +256,7 @@ test "cpu - set u8 regs, get u16 reg" {
     cpu.set(.h, 7);
     cpu.set(.l, 8);
 
-    try std.testing.expectEqual(0x0102, cpu.get(.af));
+    try std.testing.expectEqual(0x0120, cpu.get(.af));
     try std.testing.expectEqual(0x0304, cpu.get(.bc));
     try std.testing.expectEqual(0x0506, cpu.get(.de));
     try std.testing.expectEqual(0x0708, cpu.get(.hl));
@@ -166,8 +271,8 @@ const Gameboy = struct {
 };
 
 pub fn main() anyerror!void {
-    var gameboy = Gameboy{};
-    gameboy.cpu.set(.a, 0);
+    var gameboy = Gameboy.init();
+    gameboy.reset();
 
     const screenWidth = Gameboy.width * 4;
     const screenHeight = Gameboy.height * 4;
