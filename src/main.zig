@@ -17,6 +17,13 @@ const Flag = enum(u8) {
     }
 };
 
+const FlagS = struct {
+    zero: bool = false,
+    subtract: bool = false,
+    half_carry: bool = false,
+    carry: bool = false,
+};
+
 const Cpu = struct {
     a: u8 = 0,
     b: u8 = 0,
@@ -80,12 +87,22 @@ const Cpu = struct {
         return (self.f & flag.mask()) > 0;
     }
 
+    /// Set a flag while retaining the value of others.
     pub inline fn setFlag(self: *@This(), comptime flag: Flag, value: bool) void {
         if (value) {
             self.f = self.f | flag.mask();
         } else {
             self.f = self.f & ~flag.mask();
         }
+    }
+
+    /// Set all flags at once.
+    pub fn setFlags(self: *@This(), flags: FlagS) void {
+        self.f =
+            (if (flags.zero) Flag.z.mask() else 0) |
+            (if (flags.subtract) Flag.n.mask() else 0) |
+            (if (flags.half_carry) Flag.h.mask() else 0) |
+            (if (flags.carry) Flag.c.mask() else 0);
     }
 
     pub inline fn get(self: *@This(), comptime reg: Register) Register.typeOf(reg) {
@@ -134,6 +151,32 @@ const Cpu = struct {
         }
     }
 
+    pub fn add(self: *@This(), value: u8) void {
+        const reg = self.get(.a);
+        const result, const overflow = @addWithOverflow(reg, value);
+
+        self.set(.a, result);
+        self.setFlags(.{
+            .zero = result == 0,
+            .subtract = false,
+            .half_carry = (reg & 0xF) + (value & 0xF) > 0xF,
+            .carry = overflow > 0,
+        });
+    }
+
+    pub fn sub(self: *@This(), value: u8) void {
+        const reg = self.get(.a);
+        const result, const overflow = @subWithOverflow(reg, value);
+
+        self.set(.a, result);
+        self.setFlags(.{
+            .zero = result == 0,
+            .subtract = true,
+            .half_carry = (reg & 0xF) < (value & 0xF),
+            .carry = overflow > 0,
+        });
+    }
+
     pub fn execute(self: *@This(), instruction: Instruction) void {
         const dst = instruction.dst;
         const src = instruction.src;
@@ -141,8 +184,7 @@ const Cpu = struct {
             .add => {
                 std.debug.assert(dst == .a);
 
-                const dv = self.get(.a);
-                const sv = switch (src) {
+                const value = switch (src) {
                     .a => self.get(.a),
                     .b => self.get(.b),
                     .c => self.get(.c),
@@ -154,27 +196,53 @@ const Cpu = struct {
                     else => @panic("unimplemented"),
                 };
 
-                const out = @addWithOverflow(dv, sv);
-                self.set(.a, out[0]);
+                self.add(value);
 
-                self.setFlag(.n, false);
-                self.setFlag(.z, out[0] == 0);
-                self.setFlag(.c, out[1] > 0);
-                self.setFlag(.h, (dv & 0xF) + (sv & 0xF) > 0xF);
+                self.pc += 1;
+            },
+            .sub => {
+                std.debug.assert(dst == .a);
 
-                // TODO minimize writes for microcontrollers?
-                // self.f =
-                //     (if (out[0] == 0) Flag.z.mask() else 0) |
-                //     (if (out[1] > 0) Flag.c.mask() else 0) |
-                //     (if ((dv & 0xF) + (sv & 0xF) > 0xF) Flag.h.mask() else 0);
+                const value = switch (src) {
+                    .a => self.get(.a),
+                    .b => self.get(.b),
+                    .c => self.get(.c),
+                    .d => self.get(.d),
+                    .e => self.get(.e),
+                    .f => self.get(.f),
+                    .h => self.get(.h),
+                    .l => self.get(.l),
+                    else => @panic("unimplemented"),
+                };
 
-                // TODO move to higher level
+                self.sub(value);
+
                 self.pc += 1;
             },
             else => @panic("unimplemented"),
         }
     }
 };
+
+test "cpu - sub" {
+    {
+        var cpu = Cpu.init(.{ .a = 2, .b = 1 });
+
+        cpu.execute(.{ .op = .sub, .dst = .a, .src = .b });
+        try std.testing.expectEqual(1, cpu.get(.a));
+        try std.testing.expectEqual(true, cpu.getFlag(.n));
+        try std.testing.expectEqual(false, cpu.getFlag(.z));
+
+        cpu.execute(.{ .op = .sub, .dst = .a, .src = .b });
+        try std.testing.expectEqual(0, cpu.get(.a));
+        try std.testing.expectEqual(true, cpu.getFlag(.z));
+
+        cpu.execute(.{ .op = .sub, .dst = .a, .src = .b });
+        try std.testing.expectEqual(0xFF, cpu.get(.a));
+        try std.testing.expectEqual(true, cpu.getFlag(.c));
+        try std.testing.expectEqual(true, cpu.getFlag(.h));
+    }
+}
 
 test "cpu - execute - add" {
     {
