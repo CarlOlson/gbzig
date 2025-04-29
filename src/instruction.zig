@@ -1,48 +1,92 @@
+const std = @import("std");
 const Register = @import("register.zig").Register;
 
-pub const Instruction = enum(u8) {
-    nop = 0x00,
+pub fn next(t: anytype, read: *const fn (@TypeOf(t)) ?u8) ?Op {
+    if (read(t)) |byte| {
+        return switch (byte) {
+            0x00 => .{ .nop = 0 },
 
-    ld_a_8 = 0x3E,
+            0x80 => Add.init(.b),
+            0x81 => Add.init(.c),
+            0x82 => Add.init(.d),
+            0x83 => Add.init(.e),
+            0x84 => Add.init(.h),
+            0x85 => Add.init(.l),
+            0x86 => Add.init(.ahl),
+            0x87 => Add.init(.a),
 
-    ld_a16_a = 0xEA,
+            0x90 => Sub.init(.b),
+            0x91 => Sub.init(.c),
+            0x92 => Sub.init(.d),
+            0x93 => Sub.init(.e),
+            0x94 => Sub.init(.h),
+            0x95 => Sub.init(.l),
+            0x96 => Sub.init(.ahl),
+            0x97 => Sub.init(.a),
 
-    ld_a_a16 = 0xFA,
+            0xA0 => And.init(.b),
+            0xA1 => And.init(.c),
+            0xA2 => And.init(.d),
+            0xA3 => And.init(.e),
+            0xA4 => And.init(.h),
+            0xA5 => And.init(.l),
+            0xA6 => And.init(.ahl),
+            0xA7 => And.init(.a),
 
-    add_a_b = 0x80,
-    add_a_c = 0x81,
-    add_a_d = 0x82,
-    add_a_e = 0x83,
-    add_a_h = 0x84,
-    add_a_l = 0x85,
-    add_a_hl = 0x86,
-    add_a_a = 0x87,
-    adc_a_b = 0x88,
-    adc_a_c = 0x89,
-    adc_a_d = 0x8A,
-    adc_a_e = 0x8B,
-    adc_a_h = 0x8C,
-    adc_a_l = 0x8D,
-    adc_a_hl = 0x8E,
-    adc_a_a = 0x8F,
+            0xB0 => Or.init(.b),
+            0xB1 => Or.init(.c),
+            0xB2 => Or.init(.d),
+            0xB3 => Or.init(.e),
+            0xB4 => Or.init(.h),
+            0xB5 => Or.init(.l),
+            0xB6 => Or.init(.ahl),
+            0xB7 => Or.init(.a),
 
-    sub_a_b = 0x90,
-    sub_a_c = 0x91,
-    sub_a_d = 0x92,
-    sub_a_e = 0x93,
-    sub_a_h = 0x94,
-    sub_a_l = 0x95,
-    sub_a_hl = 0x96,
-    sub_a_a = 0x97,
-    sbc_a_b = 0x98,
-    sbc_a_c = 0x99,
-    sbc_a_d = 0x9A,
-    sbc_a_e = 0x9B,
-    sbc_a_h = 0x9C,
-    sbc_a_l = 0x9D,
-    sbc_a_hl = 0x9E,
-    sbc_a_a = 0x9F,
+            0xC6 => Add.init(.{ .d8 = read(t).? }),
+            0xD6 => Sub.init(.{ .d8 = read(t).? }),
+            0xE6 => And.init(.{ .d8 = read(t).? }),
+            0xF6 => Or.init(.{ .d8 = read(t).? }),
+
+            else => @panic("not implemented"),
+        };
+    } else {
+        return null;
+    }
+}
+
+/// Test utility
+const Seq = struct {
+    index: usize = 0,
+    data: []const u8,
+
+    fn read(self: *@This()) ?u8 {
+        if (self.index >= self.data.len) {
+            return null;
+        } else {
+            const value = self.data[self.index];
+            self.index += 1;
+            return value;
+        }
+    }
 };
+
+test "next" {
+    var seq = Seq{ .data = &.{0} };
+    try std.testing.expectEqual(
+        Op{ .nop = 0 },
+        next(&seq, Seq.read).?,
+    );
+
+    seq = Seq{ .data = &.{ 0xC6, 0x01 } };
+    try std.testing.expectEqual(
+        Add.init(.{ .d8 = 1 }),
+        next(&seq, Seq.read).?,
+    );
+    try std.testing.expectEqual(
+        null,
+        next(&seq, Seq.read),
+    );
+}
 
 pub const Op = union(enum) {
     // CPU control
@@ -59,6 +103,8 @@ pub const Op = union(enum) {
     // 8bit arithmetic
     add: Add,
     sub: Sub,
+    and_: And,
+    or_: Or,
 
     // 8bit transfer
     ld: Load,
@@ -90,6 +136,12 @@ pub const Add = struct {
         ahl: u0,
         d8: u8,
     };
+
+    pub fn init(right: Operand) Op {
+        return .{
+            .add = .{ .right = right },
+        };
+    }
 };
 
 pub const Sub = struct {
@@ -106,6 +158,56 @@ pub const Sub = struct {
         ahl: u0,
         d8: u8,
     };
+
+    pub fn init(right: Operand) Op {
+        return .{
+            .sub = .{ .right = right },
+        };
+    }
+};
+
+pub const And = struct {
+    right: Operand,
+
+    pub const Operand = union(enum) {
+        a: u0,
+        b: u0,
+        c: u0,
+        d: u0,
+        e: u0,
+        h: u0,
+        l: u0,
+        ahl: u0,
+        d8: u8,
+    };
+
+    pub fn init(right: Operand) Op {
+        return .{
+            .and_ = .{ .right = right },
+        };
+    }
+};
+
+pub const Or = struct {
+    right: Operand,
+
+    pub const Operand = union(enum) {
+        a: u0,
+        b: u0,
+        c: u0,
+        d: u0,
+        e: u0,
+        h: u0,
+        l: u0,
+        ahl: u0,
+        d8: u8,
+    };
+
+    pub fn init(right: Operand) Op {
+        return .{
+            .or_ = .{ .right = right },
+        };
+    }
 };
 
 pub const Load = struct {
