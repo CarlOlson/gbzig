@@ -2,7 +2,7 @@ const std = @import("std");
 const rl = @import("raylib");
 
 const Register = @import("register.zig").Register;
-const Instruction = @import("instruction.zig").T;
+const Op = @import("instruction.zig").Op;
 
 const clockHz = 2 ** 22;
 
@@ -177,20 +177,15 @@ const Cpu = struct {
         });
     }
 
-    pub fn execute(self: *@This(), instruction: Instruction) void {
-        const dst = instruction.dst;
-        const src = instruction.src;
-        switch (instruction.op) {
-            .add => {
-                std.debug.assert(dst == .a);
-
-                const value = switch (src) {
+    pub fn execute(self: *@This(), op0: Op) void {
+        switch (op0) {
+            .add => |op| {
+                const value = switch (op.right) {
                     .a => self.get(.a),
                     .b => self.get(.b),
                     .c => self.get(.c),
                     .d => self.get(.d),
                     .e => self.get(.e),
-                    .f => self.get(.f),
                     .h => self.get(.h),
                     .l => self.get(.l),
                     else => @panic("unimplemented"),
@@ -200,16 +195,13 @@ const Cpu = struct {
 
                 self.pc += 1;
             },
-            .sub => {
-                std.debug.assert(dst == .a);
-
-                const value = switch (src) {
+            .sub => |op| {
+                const value = switch (op.right) {
                     .a => self.get(.a),
                     .b => self.get(.b),
                     .c => self.get(.c),
                     .d => self.get(.d),
                     .e => self.get(.e),
-                    .f => self.get(.f),
                     .h => self.get(.h),
                     .l => self.get(.l),
                     else => @panic("unimplemented"),
@@ -228,16 +220,16 @@ test "cpu - sub" {
     {
         var cpu = Cpu.init(.{ .a = 2, .b = 1 });
 
-        cpu.execute(.{ .op = .sub, .dst = .a, .src = .b });
+        cpu.execute(.{ .sub = .{ .right = .{ .b = 0 } } });
         try std.testing.expectEqual(1, cpu.get(.a));
         try std.testing.expectEqual(true, cpu.getFlag(.n));
         try std.testing.expectEqual(false, cpu.getFlag(.z));
 
-        cpu.execute(.{ .op = .sub, .dst = .a, .src = .b });
+        cpu.execute(.{ .sub = .{ .right = .{ .b = 0 } } });
         try std.testing.expectEqual(0, cpu.get(.a));
         try std.testing.expectEqual(true, cpu.getFlag(.z));
 
-        cpu.execute(.{ .op = .sub, .dst = .a, .src = .b });
+        cpu.execute(.{ .sub = .{ .right = .{ .b = 0 } } });
         try std.testing.expectEqual(0xFF, cpu.get(.a));
         try std.testing.expectEqual(true, cpu.getFlag(.c));
         try std.testing.expectEqual(true, cpu.getFlag(.h));
@@ -247,7 +239,7 @@ test "cpu - sub" {
 test "cpu - execute - add" {
     {
         var cpu = Cpu.init(.{ .a = 2, .b = 4, .subtract = true });
-        cpu.execute(.{ .op = .add, .dst = .a, .src = .b });
+        cpu.execute(.{ .add = .{ .right = .{ .b = 0 } } });
         try std.testing.expectEqual(6, cpu.get(.a));
         try std.testing.expectEqual(false, cpu.getFlag(.n));
         try std.testing.expectEqual(false, cpu.getFlag(.z));
@@ -256,12 +248,12 @@ test "cpu - execute - add" {
 
     {
         var cpu = Cpu.init(.{ .a = 0xFF, .b = 1 });
-        cpu.execute(.{ .op = .add, .dst = .a, .src = .b });
+        cpu.execute(.{ .add = .{ .right = .{ .b = 0 } } });
         try std.testing.expectEqual(0, cpu.get(.a));
         try std.testing.expectEqual(true, cpu.getFlag(.z));
         try std.testing.expectEqual(true, cpu.getFlag(.c));
 
-        cpu.execute(.{ .op = .add, .dst = .a, .src = .b });
+        cpu.execute(.{ .add = .{ .right = .{ .b = 0 } } });
         try std.testing.expectEqual(1, cpu.get(.a));
         try std.testing.expectEqual(false, cpu.getFlag(.z));
         try std.testing.expectEqual(false, cpu.getFlag(.c));
@@ -269,11 +261,11 @@ test "cpu - execute - add" {
 
     {
         var cpu = Cpu.init(.{ .a = 0xF, .b = 1 });
-        cpu.execute(.{ .op = .add, .dst = .a, .src = .b });
+        cpu.execute(.{ .add = .{ .right = .{ .b = 0 } } });
         try std.testing.expectEqual(0x10, cpu.get(.a));
         try std.testing.expectEqual(true, cpu.getFlag(.h));
 
-        cpu.execute(.{ .op = .add, .dst = .a, .src = .b });
+        cpu.execute(.{ .add = .{ .right = .{ .b = 0 } } });
         try std.testing.expectEqual(0x11, cpu.get(.a));
         try std.testing.expectEqual(false, cpu.getFlag(.h));
     }

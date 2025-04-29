@@ -1,6 +1,14 @@
 const Register = @import("register.zig").Register;
 
 pub const Instruction = enum(u8) {
+    nop = 0x00,
+
+    ld_a_8 = 0x3E,
+
+    ld_a16_a = 0xEA,
+
+    ld_a_a16 = 0xFA,
+
     add_a_b = 0x80,
     add_a_c = 0x81,
     add_a_d = 0x82,
@@ -36,15 +44,81 @@ pub const Instruction = enum(u8) {
     sbc_a_a = 0x9F,
 };
 
-pub const Op = enum {
-    add,
-    adc,
-    sub,
-    sbc,
+pub const Op = union(enum) {
+    // CPU control
+    nop: u0,
+    stop: u0,
+    halt: u0,
+    di: u0,
+    ei: u0,
+    daa: u0,
+    scf: u0,
+    cpl: u0,
+    ccf: u0,
+
+    // 8bit arithmetic
+    add: Add,
+    sub: Sub,
+
+    // 8bit transfer
+    ld: Load,
+
+    // 16bit arithmetic
+
+    // 16bit transfer
+
+    // jump
+
+    // call and reeturn
+
+    // rotate shift
+
+    // bit operation
 };
 
-pub const T = struct {
-    op: Op,
-    src: Register,
-    dst: Register,
+pub const Add = struct {
+    right: Operand,
+
+    pub const Operand = union(enum) {
+        a: u0,
+        b: u0,
+        c: u0,
+        d: u0,
+        e: u0,
+        h: u0,
+        l: u0,
+        ahl: u0,
+        d8: u8,
+    };
+};
+
+pub const Sub = struct {
+    right: Operand,
+
+    pub const Operand = union(enum) {
+        a: u0,
+        b: u0,
+        c: u0,
+        d: u0,
+        e: u0,
+        h: u0,
+        l: u0,
+        ahl: u0,
+        d8: u8,
+    };
+};
+
+pub const Load = struct {
+    left: Operand,
+    right: Operand,
+
+    pub const Operand = union(enum) {
+        d8: u8,
+        a8: u8,
+        a16: u16,
+        reg: Register,
+        reg_address: Register,
+        hl_high_address: u0,
+        hl_low_address: u0,
+    };
 };
