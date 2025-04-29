@@ -220,16 +220,16 @@ test "cpu - sub" {
     {
         var cpu = Cpu.init(.{ .a = 2, .b = 1 });
 
-        cpu.execute(.{ .sub = .{ .right = .{ .b = 0 } } });
+        cpu.execute(.{ .sub = .{ .right = .b } });
         try std.testing.expectEqual(1, cpu.get(.a));
         try std.testing.expectEqual(true, cpu.getFlag(.n));
         try std.testing.expectEqual(false, cpu.getFlag(.z));
 
-        cpu.execute(.{ .sub = .{ .right = .{ .b = 0 } } });
+        cpu.execute(.{ .sub = .{ .right = .b } });
         try std.testing.expectEqual(0, cpu.get(.a));
         try std.testing.expectEqual(true, cpu.getFlag(.z));
 
-        cpu.execute(.{ .sub = .{ .right = .{ .b = 0 } } });
+        cpu.execute(.{ .sub = .{ .right = .b } });
         try std.testing.expectEqual(0xFF, cpu.get(.a));
         try std.testing.expectEqual(true, cpu.getFlag(.c));
         try std.testing.expectEqual(true, cpu.getFlag(.h));
@@ -239,7 +239,7 @@ test "cpu - sub" {
 test "cpu - execute - add" {
     {
         var cpu = Cpu.init(.{ .a = 2, .b = 4, .subtract = true });
-        cpu.execute(.{ .add = .{ .right = .{ .b = 0 } } });
+        cpu.execute(.{ .add = .{ .right = .b } });
         try std.testing.expectEqual(6, cpu.get(.a));
         try std.testing.expectEqual(false, cpu.getFlag(.n));
         try std.testing.expectEqual(false, cpu.getFlag(.z));
@@ -248,12 +248,12 @@ test "cpu - execute - add" {
 
     {
         var cpu = Cpu.init(.{ .a = 0xFF, .b = 1 });
-        cpu.execute(.{ .add = .{ .right = .{ .b = 0 } } });
+        cpu.execute(.{ .add = .{ .right = .b } });
         try std.testing.expectEqual(0, cpu.get(.a));
         try std.testing.expectEqual(true, cpu.getFlag(.z));
         try std.testing.expectEqual(true, cpu.getFlag(.c));
 
-        cpu.execute(.{ .add = .{ .right = .{ .b = 0 } } });
+        cpu.execute(.{ .add = .{ .right = .b } });
         try std.testing.expectEqual(1, cpu.get(.a));
         try std.testing.expectEqual(false, cpu.getFlag(.z));
         try std.testing.expectEqual(false, cpu.getFlag(.c));
@@ -261,11 +261,11 @@ test "cpu - execute - add" {
 
     {
         var cpu = Cpu.init(.{ .a = 0xF, .b = 1 });
-        cpu.execute(.{ .add = .{ .right = .{ .b = 0 } } });
+        cpu.execute(.{ .add = .{ .right = .b } });
         try std.testing.expectEqual(0x10, cpu.get(.a));
         try std.testing.expectEqual(true, cpu.getFlag(.h));
 
-        cpu.execute(.{ .add = .{ .right = .{ .b = 0 } } });
+        cpu.execute(.{ .add = .{ .right = .b } });
         try std.testing.expectEqual(0x11, cpu.get(.a));
         try std.testing.expectEqual(false, cpu.getFlag(.h));
     }

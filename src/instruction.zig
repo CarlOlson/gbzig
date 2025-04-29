@@ -4,7 +4,7 @@ const Register = @import("register.zig").Register;
 pub fn next(t: anytype, read: *const fn (@TypeOf(t)) ?u8) ?Op {
     if (read(t)) |byte| {
         return switch (byte) {
-            0x00 => .{ .nop = 0 },
+            0x00 => .nop,
 
             0x80 => Add.init(.b),
             0x81 => Add.init(.c),
@@ -73,7 +73,7 @@ const Seq = struct {
 test "next" {
     var seq = Seq{ .data = &.{0} };
     try std.testing.expectEqual(
-        Op{ .nop = 0 },
+        .nop,
         next(&seq, Seq.read).?,
     );
 
@@ -90,15 +90,15 @@ test "next" {
 
 pub const Op = union(enum) {
     // CPU control
-    nop: u0,
-    stop: u0,
-    halt: u0,
-    di: u0,
-    ei: u0,
-    daa: u0,
-    scf: u0,
-    cpl: u0,
-    ccf: u0,
+    nop,
+    stop,
+    halt,
+    di,
+    ei,
+    daa,
+    scf,
+    cpl,
+    ccf,
 
     // 8bit arithmetic
     add: Add,
@@ -126,14 +126,14 @@ pub const Add = struct {
     right: Operand,
 
     pub const Operand = union(enum) {
-        a: u0,
-        b: u0,
-        c: u0,
-        d: u0,
-        e: u0,
-        h: u0,
-        l: u0,
-        ahl: u0,
+        a,
+        b,
+        c,
+        d,
+        e,
+        h,
+        l,
+        ahl,
         d8: u8,
     };
 
@@ -148,14 +148,14 @@ pub const Sub = struct {
     right: Operand,
 
     pub const Operand = union(enum) {
-        a: u0,
-        b: u0,
-        c: u0,
-        d: u0,
-        e: u0,
-        h: u0,
-        l: u0,
-        ahl: u0,
+        a,
+        b,
+        c,
+        d,
+        e,
+        h,
+        l,
+        ahl,
         d8: u8,
     };
 
@@ -170,14 +170,14 @@ pub const And = struct {
     right: Operand,
 
     pub const Operand = union(enum) {
-        a: u0,
-        b: u0,
-        c: u0,
-        d: u0,
-        e: u0,
-        h: u0,
-        l: u0,
-        ahl: u0,
+        a,
+        b,
+        c,
+        d,
+        e,
+        h,
+        l,
+        ahl,
         d8: u8,
     };
 
@@ -192,14 +192,14 @@ pub const Or = struct {
     right: Operand,
 
     pub const Operand = union(enum) {
-        a: u0,
-        b: u0,
-        c: u0,
-        d: u0,
-        e: u0,
-        h: u0,
-        l: u0,
-        ahl: u0,
+        a,
+        b,
+        c,
+        d,
+        e,
+        h,
+        l,
+        ahl,
         d8: u8,
     };
 
@@ -220,7 +220,7 @@ pub const Load = struct {
         a16: u16,
         reg: Register,
         reg_address: Register,
-        hl_high_address: u0,
-        hl_low_address: u0,
+        hl_incr_address,
+        hl_decr_address,
     };
 };
